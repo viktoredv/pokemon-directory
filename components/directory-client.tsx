@@ -73,7 +73,7 @@ export function DirectoryClient({
         return g ? selectedGens.includes(g.id) : false;
       });
     }
-    return list.slice(0, 60).map((e) => e.id);
+    return list.slice(0, 150).map((e) => e.id);
   }, [filtersActive, directory, debounced, selectedGens]);
 
   // Fetch details for filtered ids (then filter by type client-side).
@@ -85,12 +85,22 @@ export function DirectoryClient({
     const controller = new AbortController();
     startSearch(async () => {
       try {
-        const res = await fetch(
-          `/api/pokemon/by-id?ids=${filteredIds.join(",")}`,
-          { signal: controller.signal },
+        // Chunk to stay under the API route's per-request cap.
+        const chunks: number[][] = [];
+        for (let i = 0; i < filteredIds.length; i += 40) {
+          chunks.push(filteredIds.slice(i, i + 40));
+        }
+        const responses = await Promise.all(
+          chunks.map((c) =>
+            fetch(`/api/pokemon/by-id?ids=${c.join(",")}`, {
+              signal: controller.signal,
+            }).then((r) => r.json() as Promise<{ items: PokemonCardData[] }>),
+          ),
         );
-        const data = (await res.json()) as { items: PokemonCardData[] };
-        let items = data.items;
+        const order = new Map(filteredIds.map((id, i) => [id, i]));
+        let items = responses
+          .flatMap((r) => r.items)
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
         if (selectedTypes.length > 0) {
           items = items.filter((p) =>
             p.types.some((t) => selectedTypes.includes(t as PokemonType)),

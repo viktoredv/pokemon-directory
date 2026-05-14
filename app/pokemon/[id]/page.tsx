@@ -12,8 +12,13 @@ import {
   idFromUrl,
   paddedId,
 } from "@/lib/pokeapi";
-import type { EvolutionLink, PokemonType } from "@/lib/types";
-import { generationForId, GENERATIONS, typeStyles } from "@/lib/type-colors";
+import type { EvolutionLink, PokemonType, TypeInfo } from "@/lib/types";
+import {
+  ALL_TYPES,
+  generationForId,
+  GENERATIONS,
+  typeStyles,
+} from "@/lib/type-colors";
 import { TypeChip } from "@/components/type-chip";
 import { StatBar } from "@/components/stat-bar";
 import { DetailTabs } from "@/components/detail-tabs";
@@ -39,7 +44,8 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   const numericId = Number(id);
   if (!Number.isFinite(numericId) || numericId < 1) notFound();
 
-  let pokemon, species;
+  let pokemon: Awaited<ReturnType<typeof getPokemon>>;
+  let species: Awaited<ReturnType<typeof getSpecies>>;
   try {
     pokemon = await getPokemon(numericId);
     species = await getSpecies(pokemon.species.name);
@@ -85,43 +91,77 @@ export default async function PokemonDetailPage({ params }: PageProps) {
     }),
   ).then((r) => r.filter((x): x is { id: number; name: string; types: PokemonType[] } => x !== null));
 
-  // Damage matchups: union of double-damage targets across this Pokémon's types.
-  const typeInfos = await Promise.all(
-    pokemon.types.map((t) => getType(t.type.name).catch(() => null)),
-  );
+  // Fetch every type's matchup data once so we can compute strong/weak/immune.
+  const allTypeInfos = (await Promise.all(
+    ALL_TYPES.map((t) => getType(t).catch(() => null)),
+  )).filter((t): t is TypeInfo => t !== null);
+  const typeInfoByName = new Map(allTypeInfos.map((t) => [t.name, t]));
+  const ownDefenders = pokemon.types
+    .map((t) => typeInfoByName.get(t.type.name as PokemonType))
+    .filter((t): t is TypeInfo => Boolean(t));
+
+  // Offensive 2× (union of double_damage_to across own types).
   const strongAgainstTypes = Array.from(
     new Set(
-      typeInfos
-        .filter((t): t is NonNullable<typeof t> => t !== null)
-        .flatMap((t) => t.damage_relations.double_damage_to.map((r) => r.name)),
+      ownDefenders.flatMap((t) =>
+        t.damage_relations.double_damage_to.map((r) => r.name),
+      ),
     ),
   );
 
-  // For each weak type, gather a few sample Pokémon (deduped, base forms only).
-  const weakTypeInfos = await Promise.all(
-    strongAgainstTypes.map((t) => getType(t).catch(() => null)),
-  );
-  const seen = new Set<number>([pokemon.id]);
-  const strongAgainstPokemon: { id: number; name: string; type: PokemonType }[] = [];
-  for (const info of weakTypeInfos) {
-    if (!info) continue;
-    let taken = 0;
-    for (const entry of info.pokemon) {
-      if (taken >= 3) break;
-      const pid = idFromUrl(entry.pokemon.url);
-      if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
-      seen.add(pid);
-      strongAgainstPokemon.push({ id: pid, name: entry.pokemon.name, type: info.name });
-      taken++;
+  // Defensive multipliers: for each attacker type, multiply through own types.
+  const weakAgainstTypes: PokemonType[] = [];
+  for (const attacker of ALL_TYPES) {
+    let m = 1;
+    for (const dt of ownDefenders) {
+      if (dt.damage_relations.double_damage_from.some((r) => r.name === attacker)) m *= 2;
+      if (dt.damage_relations.half_damage_from.some((r) => r.name === attacker)) m *= 0.5;
+      if (dt.damage_relations.no_damage_from.some((r) => r.name === attacker)) m *= 0;
     }
+    if (m >= 2) weakAgainstTypes.push(attacker);
   }
-  strongAgainstPokemon.splice(15);
+
+  // Offensive 0×: intersection of no_damage_to across own types.
+  let ineffectiveSet: Set<PokemonType> | null = null;
+  for (const dt of ownDefenders) {
+    const noDmg = new Set(
+      dt.damage_relations.no_damage_to.map((r) => r.name),
+    );
+    if (ineffectiveSet === null) ineffectiveSet = noDmg;
+    else for (const x of [...ineffectiveSet]) if (!noDmg.has(x)) ineffectiveSet.delete(x);
+  }
+  const ineffectiveAgainstTypes = ineffectiveSet ? [...ineffectiveSet] : [];
+
+  // Pick sample Pokémon for each type bucket from the prefetched info.
+  function samplePokemon(types: PokemonType[], maxTotal = 15, perType = 3) {
+    const seen = new Set<number>([pokemon.id]);
+    const out: { id: number; name: string; type: PokemonType }[] = [];
+    for (const t of types) {
+      const info = typeInfoByName.get(t);
+      if (!info) continue;
+      let taken = 0;
+      for (const entry of info.pokemon) {
+        if (taken >= perType) break;
+        const pid = idFromUrl(entry.pokemon.url);
+        if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
+        seen.add(pid);
+        out.push({ id: pid, name: entry.pokemon.name, type: info.name });
+        taken++;
+      }
+      if (out.length >= maxTotal) break;
+    }
+    return out.slice(0, maxTotal);
+  }
+
+  const strongAgainstPokemon = samplePokemon(strongAgainstTypes);
+  const weakAgainstPokemon = samplePokemon(weakAgainstTypes);
+  const ineffectiveAgainstPokemon = samplePokemon(ineffectiveAgainstTypes);
 
   return (
     <main className="flex-1 pb-8">
       <section
         className={cn(
-          "relative overflow-hidden bg-gradient-to-br pb-6 pt-3",
+          "relative overflow-hidden bg-gradient-to-br pb-6 pt-3 text-zinc-900",
           tint.from,
           tint.to,
         )}
@@ -140,14 +180,14 @@ export default async function PokemonDetailPage({ params }: PageProps) {
         <div className="mx-auto mt-2 max-w-3xl px-4">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="tabular text-sm font-semibold text-foreground/60">
+              <p className="tabular text-sm font-semibold text-zinc-900/60">
                 {paddedId(pokemon.id)}
               </p>
               <h1 className="text-3xl font-bold tracking-tight">
                 {formatPokemonName(pokemon.name)}
               </h1>
               {genus && (
-                <p className="mt-0.5 text-sm text-foreground/70">{genus}</p>
+                <p className="mt-0.5 text-sm text-zinc-900/70">{genus}</p>
               )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {pokemon.types.map((t) => (
@@ -238,47 +278,21 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                     </div>
                   </dl>
 
-                  {strongAgainstPokemon.length > 0 && (
-                    <div>
-                      <div className="mb-2 flex items-baseline justify-between">
-                        <h4 className="text-sm font-semibold">
-                          Strong against{" "}
-                          <span className="text-xs font-normal text-muted">
-                            (2× damage)
-                          </span>
-                        </h4>
-                      </div>
-                      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        {strongAgainstPokemon.map((p) => (
-                          <li key={p.id} className="shrink-0">
-                            <Link
-                              href={`/pokemon/${p.id}`}
-                              className={cn(
-                                "flex w-24 flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 transition hover:shadow-md",
-                                typeStyles[p.type].from,
-                                typeStyles[p.type].to,
-                              )}
-                            >
-                              <div className="relative h-16 w-16">
-                                <Image
-                                  src={artworkUrl(p.id)}
-                                  alt={formatPokemonName(p.name)}
-                                  fill
-                                  sizes="64px"
-                                  className="object-contain"
-                                  unoptimized
-                                />
-                              </div>
-                              <span className="line-clamp-1 text-center text-[11px] font-medium">
-                                {formatPokemonName(p.name)}
-                              </span>
-                              <TypeChip type={p.type} />
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <MatchupRow
+                    title="Strong against"
+                    hint="2× damage"
+                    items={strongAgainstPokemon}
+                  />
+                  <MatchupRow
+                    title="Weak against"
+                    hint="takes 2× damage"
+                    items={weakAgainstPokemon}
+                  />
+                  <MatchupRow
+                    title="Doesn't damage"
+                    hint="0× damage"
+                    items={ineffectiveAgainstPokemon}
+                  />
                 </div>
               ),
             },
@@ -355,7 +369,7 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                             <Link
                               href={`/pokemon/${f.id}`}
                               className={cn(
-                                "flex flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-3 transition hover:shadow-md",
+                                "flex flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-3 text-zinc-900 transition hover:shadow-md",
                                 typeStyles[f.types[0] ?? "normal"].from,
                                 typeStyles[f.types[0] ?? "normal"].to,
                               )}
@@ -390,5 +404,54 @@ export default async function PokemonDetailPage({ params }: PageProps) {
         />
       </section>
     </main>
+  );
+}
+
+function MatchupRow({
+  title,
+  hint,
+  items,
+}: {
+  title: string;
+  hint: string;
+  items: { id: number; name: string; type: PokemonType }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <h4 className="mb-2 text-sm font-semibold">
+        {title}{" "}
+        <span className="text-xs font-normal text-muted">({hint})</span>
+      </h4>
+      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {items.map((p) => (
+          <li key={p.id} className="shrink-0">
+            <Link
+              href={`/pokemon/${p.id}`}
+              className={cn(
+                "flex w-24 flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 text-zinc-900 transition hover:shadow-md",
+                typeStyles[p.type].from,
+                typeStyles[p.type].to,
+              )}
+            >
+              <div className="relative h-16 w-16">
+                <Image
+                  src={artworkUrl(p.id)}
+                  alt={formatPokemonName(p.name)}
+                  fill
+                  sizes="64px"
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+              <span className="line-clamp-1 text-center text-[11px] font-medium">
+                {formatPokemonName(p.name)}
+              </span>
+              <TypeChip type={p.type} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
