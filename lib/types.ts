@@ -76,9 +76,28 @@ export interface PokemonSpecies {
   varieties: { is_default: boolean; pokemon: NamedRef }[];
 }
 
+export interface EvolutionDetail {
+  trigger: NamedRef;
+  item: NamedRef | null;
+  held_item: NamedRef | null;
+  min_level: number | null;
+  min_happiness: number | null;
+  min_affection: number | null;
+  min_beauty: number | null;
+  known_move: NamedRef | null;
+  known_move_type: NamedRef | null;
+  location: NamedRef | null;
+  time_of_day: string;
+  gender: number | null;
+  needs_overworld_rain: boolean;
+  turn_upside_down: boolean;
+}
+
 export interface EvolutionLink {
   species: NamedRef;
   evolves_to: EvolutionLink[];
+  evolution_details: EvolutionDetail[];
+  is_baby: boolean;
 }
 
 export interface EvolutionChain {

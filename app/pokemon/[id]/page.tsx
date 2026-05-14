@@ -12,7 +12,7 @@ import {
   idFromUrl,
   paddedId,
 } from "@/lib/pokeapi";
-import type { EvolutionLink, PokemonType, TypeInfo } from "@/lib/types";
+import type { EvolutionDetail, EvolutionLink, PokemonType, TypeInfo } from "@/lib/types";
 import {
   ALL_TYPES,
   generationForId,
@@ -31,14 +31,46 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-function flattenChain(link: EvolutionLink): { name: string; id: number }[] {
-  const out: { name: string; id: number }[] = [];
-  const walk = (l: EvolutionLink) => {
-    out.push({ name: l.species.name, id: idFromUrl(l.species.url) });
-    l.evolves_to.forEach(walk);
+type EvoStep = { id: number; name: string; condition: string };
+
+function describeEvoDetail(details: EvolutionDetail[]): string {
+  if (!details.length) return "";
+  const d = details[0];
+  const trigger = d.trigger.name;
+  if (trigger === "use-item" && d.item)
+    return d.item.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  if (trigger === "trade") {
+    if (d.held_item) return `Trade (${d.held_item.name.replace(/-/g, " ")})`;
+    return "Trade";
+  }
+  if (trigger === "level-up") {
+    const parts: string[] = [];
+    if (d.min_level) parts.push(`Lv. ${d.min_level}`);
+    if (d.min_happiness) parts.push("Friendship");
+    if (d.min_affection) parts.push("Affection");
+    if (d.time_of_day === "day") parts.push("Day");
+    if (d.time_of_day === "night") parts.push("Night");
+    if (d.known_move_type) parts.push(`${d.known_move_type.name} move`);
+    if (d.location) parts.push(d.location.name.replace(/-/g, " "));
+    if (d.held_item) parts.push(`hold ${d.held_item.name.replace(/-/g, " ")}`);
+    if (d.needs_overworld_rain) parts.push("Rain");
+    if (d.turn_upside_down) parts.push("Upside-down");
+    return parts.length ? parts.join(", ") : "Level up";
+  }
+  return trigger.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Returns all root-to-leaf paths through the chain so branches show as separate rows.
+function getEvoPaths(link: EvolutionLink, incomingDetails: EvolutionDetail[] = []): EvoStep[][] {
+  const step: EvoStep = {
+    id: idFromUrl(link.species.url),
+    name: link.species.name,
+    condition: describeEvoDetail(incomingDetails),
   };
-  walk(link);
-  return out;
+  if (!link.evolves_to.length) return [[step]];
+  return link.evolves_to.flatMap((next) =>
+    getEvoPaths(next, next.evolution_details).map((path) => [step, ...path]),
+  );
 }
 
 export default async function PokemonDetailPage({ params }: PageProps) {
@@ -59,10 +91,10 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   const tint = typeStyles[primary];
 
   const evolutionChainId = idFromUrl(species.evolution_chain.url);
-  let evolutions: { name: string; id: number }[] = [];
+  let evoPaths: EvoStep[][] = [];
   try {
     const chain = await getEvolutionChain(evolutionChainId);
-    evolutions = flattenChain(chain.chain);
+    evoPaths = getEvoPaths(chain.chain);
   } catch {}
 
   const flavor = species.flavor_text_entries.find(
@@ -328,40 +360,52 @@ export default async function PokemonDetailPage({ params }: PageProps) {
             {
               id: "evolution",
               label: "Evolution",
-              content: evolutions.length > 1 ? (
-                <ol className="flex flex-wrap items-center gap-3">
-                  {evolutions.map((e, i) => (
-                    <li key={e.id} className="flex items-center gap-3">
-                      <Link
-                        href={`/pokemon/${e.id}`}
-                        className="flex flex-col items-center gap-1 rounded-2xl border border-border/60 bg-surface p-3 transition hover:shadow-md"
-                      >
-                        <div className="relative h-20 w-20">
-                          <Image
-                            src={artworkUrl(e.id)}
-                            alt={formatPokemonName(e.name)}
-                            fill
-                            sizes="80px"
-                            className="object-contain"
-                            unoptimized
-                          />
-                        </div>
-                        <span className="text-xs font-medium capitalize">
-                          {formatPokemonName(e.name)}
-                        </span>
-                      </Link>
-                      {i < evolutions.length - 1 && (
-                        <span className="text-muted" aria-hidden>
-                          →
-                        </span>
-                      )}
-                    </li>
+              content: evoPaths.length > 0 && evoPaths[0].length > 1 ? (
+                <div className="space-y-3">
+                  {evoPaths.map((path, pi) => (
+                    <ol key={pi} className="flex flex-wrap items-center gap-2">
+                      {path.map((step, si) => (
+                        <li key={`${step.id}-${si}`} className="flex items-center gap-2">
+                          {si > 0 && (
+                            <div className="flex flex-col items-center shrink-0">
+                              <span className="text-sm text-muted" aria-hidden>→</span>
+                              {step.condition && (
+                                <span className="max-w-[72px] text-center text-[10px] leading-tight text-muted capitalize">
+                                  {step.condition}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <Link
+                            href={`/pokemon/${step.id}`}
+                            className={cn(
+                              "flex flex-col items-center gap-1 rounded-2xl border p-2.5 transition hover:shadow-md",
+                              step.id === pokemon.id
+                                ? "border-accent bg-accent/10"
+                                : "border-border/60 bg-surface",
+                            )}
+                          >
+                            <div className="relative h-16 w-16">
+                              <Image
+                                src={artworkUrl(step.id)}
+                                alt={formatPokemonName(step.name)}
+                                fill
+                                sizes="64px"
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                            <span className="max-w-[72px] truncate text-center text-[11px] font-medium capitalize">
+                              {formatPokemonName(step.name)}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ol>
                   ))}
-                </ol>
+                </div>
               ) : (
-                <p className="text-sm text-muted">
-                  This Pokémon does not evolve.
-                </p>
+                <p className="text-sm text-muted">This Pokémon does not evolve.</p>
               ),
             },
             ...(forms.length > 0
