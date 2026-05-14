@@ -4,6 +4,7 @@ import type {
   Pokemon,
   PokemonListResponse,
   PokemonSpecies,
+  TypeInfo,
 } from "./types";
 
 const BASE = "https://pokeapi.co/api/v2";
@@ -47,6 +48,10 @@ export async function getSpecies(
 
 export async function getEvolutionChain(id: number): Promise<EvolutionChain> {
   return api<EvolutionChain>(`/evolution-chain/${id}`);
+}
+
+export async function getType(name: string): Promise<TypeInfo> {
+  return api<TypeInfo>(`/type/${name}`);
 }
 
 /** Full name+id directory: base forms + mega/gmax forms. */

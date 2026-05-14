@@ -86,6 +86,18 @@ export interface EvolutionChain {
   chain: EvolutionLink;
 }
 
+export interface TypeInfo {
+  name: PokemonType;
+  damage_relations: {
+    double_damage_to: { name: PokemonType }[];
+    half_damage_to: { name: PokemonType }[];
+    no_damage_to: { name: PokemonType }[];
+    double_damage_from: { name: PokemonType }[];
+    half_damage_from: { name: PokemonType }[];
+    no_damage_from: { name: PokemonType }[];
+  };
+}
+
 export interface DirectoryEntry {
   id: number;
   name: string;

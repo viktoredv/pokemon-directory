@@ -8,6 +8,7 @@ import {
   getEvolutionChain,
   getPokemon,
   getSpecies,
+  getType,
   idFromUrl,
   paddedId,
 } from "@/lib/pokeapi";
@@ -83,6 +84,18 @@ export default async function PokemonDetailPage({ params }: PageProps) {
       }
     }),
   ).then((r) => r.filter((x): x is { id: number; name: string; types: PokemonType[] } => x !== null));
+
+  // Damage matchups: union of double-damage targets across this Pokémon's types.
+  const typeInfos = await Promise.all(
+    pokemon.types.map((t) => getType(t.type.name).catch(() => null)),
+  );
+  const strongAgainst = Array.from(
+    new Set(
+      typeInfos
+        .filter((t): t is NonNullable<typeof t> => t !== null)
+        .flatMap((t) => t.damage_relations.double_damage_to.map((r) => r.name)),
+    ),
+  );
 
   return (
     <main className="flex-1 pb-8">
@@ -203,6 +216,19 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                         ))}
                       </dd>
                     </div>
+                    {strongAgainst.length > 0 && (
+                      <div className="col-span-2">
+                        <dt className="text-xs text-muted">
+                          Strong against{" "}
+                          <span className="text-[10px]">(2× damage)</span>
+                        </dt>
+                        <dd className="mt-1 flex flex-wrap gap-1.5">
+                          {strongAgainst.map((t) => (
+                            <TypeChip key={t} type={t} />
+                          ))}
+                        </dd>
+                      </div>
+                    )}
                   </dl>
                 </div>
               ),
