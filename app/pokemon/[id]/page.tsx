@@ -95,6 +95,27 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   try {
     const chain = await getEvolutionChain(evolutionChainId);
     evoPaths = getEvoPaths(chain.chain);
+
+    // If viewing a regional form, replace base-form IDs with regional equivalents.
+    // e.g. "meowth" step → "meowth-galar" when viewing Galarian Meowth.
+    const regionMatch = pokemon.name.match(/-(alola|galar|hisui|paldea)(?:-|$)/);
+    const region = regionMatch?.[1];
+    if (region) {
+      const uniqueSteps = new Map<number, EvoStep>();
+      for (const path of evoPaths)
+        for (const step of path)
+          if (!uniqueSteps.has(step.id)) uniqueSteps.set(step.id, step);
+
+      await Promise.all(
+        [...uniqueSteps.values()].map(async (step) => {
+          try {
+            const p = await getPokemon(`${step.name}-${region}`);
+            step.id = p.id;
+            step.name = p.name;
+          } catch { /* no regional form for this species */ }
+        }),
+      );
+    }
   } catch {}
 
   const flavor = species.flavor_text_entries.find(
