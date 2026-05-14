@@ -161,7 +161,7 @@ export function DirectoryClient({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className={cn(
-                "h-11 w-full rounded-full border border-border/70 bg-surface pl-9 pr-9 text-sm",
+                "h-11 w-full rounded-full border border-border/70 bg-surface pl-9 pr-9 text-base",
                 "placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent",
               )}
               aria-label="Search Pokémon by name"
