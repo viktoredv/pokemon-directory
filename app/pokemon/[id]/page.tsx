@@ -89,13 +89,33 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   const typeInfos = await Promise.all(
     pokemon.types.map((t) => getType(t.type.name).catch(() => null)),
   );
-  const strongAgainst = Array.from(
+  const strongAgainstTypes = Array.from(
     new Set(
       typeInfos
         .filter((t): t is NonNullable<typeof t> => t !== null)
         .flatMap((t) => t.damage_relations.double_damage_to.map((r) => r.name)),
     ),
   );
+
+  // For each weak type, gather a few sample Pokémon (deduped, base forms only).
+  const weakTypeInfos = await Promise.all(
+    strongAgainstTypes.map((t) => getType(t).catch(() => null)),
+  );
+  const seen = new Set<number>([pokemon.id]);
+  const strongAgainstPokemon: { id: number; name: string; type: PokemonType }[] = [];
+  for (const info of weakTypeInfos) {
+    if (!info) continue;
+    let taken = 0;
+    for (const entry of info.pokemon) {
+      if (taken >= 3) break;
+      const pid = idFromUrl(entry.pokemon.url);
+      if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
+      seen.add(pid);
+      strongAgainstPokemon.push({ id: pid, name: entry.pokemon.name, type: info.name });
+      taken++;
+    }
+  }
+  strongAgainstPokemon.splice(15);
 
   return (
     <main className="flex-1 pb-8">
@@ -216,20 +236,49 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                         ))}
                       </dd>
                     </div>
-                    {strongAgainst.length > 0 && (
-                      <div className="col-span-2">
-                        <dt className="text-xs text-muted">
-                          Strong against{" "}
-                          <span className="text-[10px]">(2× damage)</span>
-                        </dt>
-                        <dd className="mt-1 flex flex-wrap gap-1.5">
-                          {strongAgainst.map((t) => (
-                            <TypeChip key={t} type={t} />
-                          ))}
-                        </dd>
-                      </div>
-                    )}
                   </dl>
+
+                  {strongAgainstPokemon.length > 0 && (
+                    <div>
+                      <div className="mb-2 flex items-baseline justify-between">
+                        <h4 className="text-sm font-semibold">
+                          Strong against{" "}
+                          <span className="text-xs font-normal text-muted">
+                            (2× damage)
+                          </span>
+                        </h4>
+                      </div>
+                      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {strongAgainstPokemon.map((p) => (
+                          <li key={p.id} className="shrink-0">
+                            <Link
+                              href={`/pokemon/${p.id}`}
+                              className={cn(
+                                "flex w-24 flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 transition hover:shadow-md",
+                                typeStyles[p.type].from,
+                                typeStyles[p.type].to,
+                              )}
+                            >
+                              <div className="relative h-16 w-16">
+                                <Image
+                                  src={artworkUrl(p.id)}
+                                  alt={formatPokemonName(p.name)}
+                                  fill
+                                  sizes="64px"
+                                  className="object-contain"
+                                  unoptimized
+                                />
+                              </div>
+                              <span className="line-clamp-1 text-center text-[11px] font-medium">
+                                {formatPokemonName(p.name)}
+                              </span>
+                              <TypeChip type={p.type} />
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ),
             },

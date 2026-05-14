@@ -96,6 +96,7 @@ export interface TypeInfo {
     half_damage_from: { name: PokemonType }[];
     no_damage_from: { name: PokemonType }[];
   };
+  pokemon: { slot: number; pokemon: NamedRef }[];
 }
 
 export interface DirectoryEntry {

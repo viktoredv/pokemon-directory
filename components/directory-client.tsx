@@ -333,21 +333,25 @@ function FilterSheet({
       />
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-border/70 bg-surface p-5 pb-safe",
+          "absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl border-t border-border/70 bg-surface",
           "sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl",
           "fade-in",
         )}
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border sm:hidden" />
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Filters</h2>
-          <button
-            onClick={onClear}
-            className="text-xs font-medium text-muted underline-offset-4 hover:underline"
-          >
-            Reset
-          </button>
+        <div className="px-5 pt-5">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border sm:hidden" />
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-semibold">Filters</h2>
+            <button
+              onClick={onClear}
+              className="text-xs font-medium text-muted underline-offset-4 hover:underline"
+            >
+              Reset
+            </button>
+          </div>
         </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-2">
 
         <section className="mb-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
@@ -404,12 +408,16 @@ function FilterSheet({
           </div>
         </section>
 
-        <button
-          onClick={onClose}
-          className="h-11 w-full rounded-full bg-foreground text-sm font-medium text-background hover:opacity-90"
-        >
-          Show results
-        </button>
+        </div>
+
+        <div className="border-t border-border/60 bg-surface p-4 pb-safe">
+          <button
+            onClick={onClose}
+            className="h-11 w-full rounded-full bg-foreground text-sm font-medium text-background hover:opacity-90"
+          >
+            Show results
+          </button>
+        </div>
       </div>
     </div>
   );
