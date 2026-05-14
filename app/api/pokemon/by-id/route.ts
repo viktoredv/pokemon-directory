@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   const ids = idsParam
     .split(",")
     .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0 && n < 10000)
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 20000)
     .slice(0, 40);
 
   if (ids.length === 0) return NextResponse.json({ items: [] });
