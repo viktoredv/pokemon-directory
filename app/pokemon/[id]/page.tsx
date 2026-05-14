@@ -111,6 +111,7 @@ export default async function PokemonDetailPage({ params }: PageProps) {
 
   // Defensive multipliers: for each attacker type, multiply through own types.
   const weakAgainstTypes: PokemonType[] = [];
+  const immuneFromTypes: PokemonType[] = [];
   for (const attacker of ALL_TYPES) {
     let m = 1;
     for (const dt of ownDefenders) {
@@ -118,7 +119,8 @@ export default async function PokemonDetailPage({ params }: PageProps) {
       if (dt.damage_relations.half_damage_from.some((r) => r.name === attacker)) m *= 0.5;
       if (dt.damage_relations.no_damage_from.some((r) => r.name === attacker)) m *= 0;
     }
-    if (m >= 2) weakAgainstTypes.push(attacker);
+    if (m === 0) immuneFromTypes.push(attacker);
+    else if (m >= 2) weakAgainstTypes.push(attacker);
   }
 
   // Offensive 0×: intersection of no_damage_to across own types.
@@ -155,17 +157,25 @@ export default async function PokemonDetailPage({ params }: PageProps) {
 
   const strongAgainstPokemon = samplePokemon(strongAgainstTypes);
   const weakAgainstPokemon = samplePokemon(weakAgainstTypes);
+  const immuneFromPokemon = samplePokemon(immuneFromTypes);
   const ineffectiveAgainstPokemon = samplePokemon(ineffectiveAgainstTypes);
 
   return (
     <main className="flex-1 pb-8">
       <section
         className={cn(
-          "relative overflow-hidden bg-gradient-to-br pb-6 pt-3 text-zinc-900",
+          "relative overflow-hidden bg-gradient-to-br pb-3 pt-3 text-zinc-900",
           tint.from,
           tint.to,
         )}
       >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-4 -bottom-6 text-[140px] font-black leading-none text-white/25 select-none tabular sm:text-[180px]"
+        >
+          {paddedId(pokemon.id).replace("#", "")}
+        </span>
+
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4">
           <Link
             href="/"
@@ -177,19 +187,19 @@ export default async function PokemonDetailPage({ params }: PageProps) {
           <FavoriteButton id={pokemon.id} size="md" />
         </div>
 
-        <div className="mx-auto mt-2 max-w-3xl px-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="tabular text-sm font-semibold text-zinc-900/60">
+        <div className="relative mx-auto mt-1 max-w-3xl px-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="tabular text-xs font-semibold text-zinc-900/60">
                 {paddedId(pokemon.id)}
               </p>
-              <h1 className="text-3xl font-bold tracking-tight">
+              <h1 className="truncate text-2xl font-bold tracking-tight">
                 {formatPokemonName(pokemon.name)}
               </h1>
               {genus && (
-                <p className="mt-0.5 text-sm text-zinc-900/70">{genus}</p>
+                <p className="mt-0.5 text-xs text-zinc-900/70">{genus}</p>
               )}
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {pokemon.types.map((t) => (
                   <TypeChip
                     key={t.type.name}
@@ -199,24 +209,17 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                 ))}
               </div>
             </div>
-          </div>
-
-          <div className="relative mx-auto mt-4 aspect-square w-full max-w-xs">
-            <span
-              aria-hidden
-              className="absolute inset-x-0 top-2 text-center text-[140px] font-black leading-none text-white/30 select-none tabular sm:text-[180px]"
-            >
-              {paddedId(pokemon.id).replace("#", "")}
-            </span>
-            <Image
-              src={artworkUrl(pokemon.id)}
-              alt={formatPokemonName(pokemon.name)}
-              fill
-              sizes="(max-width: 640px) 80vw, 320px"
-              className="object-contain drop-shadow-2xl fade-in"
-              priority
-              unoptimized
-            />
+            <div className="relative h-32 w-32 shrink-0 sm:h-40 sm:w-40">
+              <Image
+                src={artworkUrl(pokemon.id)}
+                alt={formatPokemonName(pokemon.name)}
+                fill
+                sizes="(max-width: 640px) 128px, 160px"
+                className="object-contain drop-shadow-2xl fade-in"
+                priority
+                unoptimized
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -289,7 +292,12 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                     items={weakAgainstPokemon}
                   />
                   <MatchupRow
-                    title="Doesn't damage"
+                    title="Doesn't take damage from"
+                    hint="0× damage"
+                    items={immuneFromPokemon}
+                  />
+                  <MatchupRow
+                    title="Doesn't give damage to"
                     hint="0× damage"
                     items={ineffectiveAgainstPokemon}
                   />
