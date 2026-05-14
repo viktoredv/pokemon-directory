@@ -93,70 +93,71 @@ export default async function PokemonDetailPage({ params }: PageProps) {
     }),
   ).then((r) => r.filter((x): x is { id: number; name: string; types: PokemonType[] } => x !== null));
 
-  // Fetch every type's matchup data once so we can compute strong/weak/immune.
+  // Fetch every type's matchup data once.
   const allTypeInfos = (await Promise.all(
     ALL_TYPES.map((t) => getType(t).catch(() => null)),
   )).filter((t): t is TypeInfo => t !== null);
   const typeInfoByName = new Map(allTypeInfos.map((t) => [t.name, t]));
-  const ownDefenders = pokemon.types
-    .map((t) => typeInfoByName.get(t.type.name as PokemonType))
-    .filter((t): t is TypeInfo => Boolean(t));
 
-  // Offensive 2× (union of double_damage_to across own types).
-  const strongAgainstTypes = Array.from(
-    new Set(
-      ownDefenders.flatMap((t) =>
-        t.damage_relations.double_damage_to.map((r) => r.name),
-      ),
-    ),
-  );
-
-  // Defensive multipliers: for each attacker type, multiply through own types.
-  const weakAgainstTypes: PokemonType[] = [];
-  const immuneFromTypes: PokemonType[] = [];
-  for (const attacker of ALL_TYPES) {
-    let m = 1;
-    for (const dt of ownDefenders) {
-      if (dt.damage_relations.double_damage_from.some((r) => r.name === attacker)) m *= 2;
-      if (dt.damage_relations.half_damage_from.some((r) => r.name === attacker)) m *= 0.5;
-      if (dt.damage_relations.no_damage_from.some((r) => r.name === attacker)) m *= 0;
+  // Build a map of every known base-form pokémon → its full type list.
+  const pokemonInfoMap = new Map<number, { name: string; types: PokemonType[] }>();
+  for (const typeInfo of allTypeInfos) {
+    for (const entry of typeInfo.pokemon) {
+      const pid = idFromUrl(entry.pokemon.url);
+      if (pid <= 0 || pid >= 10000) continue;
+      const existing = pokemonInfoMap.get(pid);
+      if (existing) existing.types.push(typeInfo.name);
+      else pokemonInfoMap.set(pid, { name: entry.pokemon.name, types: [typeInfo.name] });
     }
-    if (m === 0) immuneFromTypes.push(attacker);
-    else if (m >= 2) weakAgainstTypes.push(attacker);
   }
 
-  // Offensive 0×: intersection of no_damage_to across own types.
-  let ineffectiveSet: Set<PokemonType> | null = null;
-  for (const dt of ownDefenders) {
-    const noDmg = new Set(
-      dt.damage_relations.no_damage_to.map((r) => r.name),
-    );
-    if (ineffectiveSet === null) ineffectiveSet = noDmg;
-    else for (const x of [...ineffectiveSet]) if (!noDmg.has(x)) ineffectiveSet.delete(x);
-  }
-  const ineffectiveAgainstTypes = ineffectiveSet ? [...ineffectiveSet] : [];
-
-  // Pick sample Pokémon for each type bucket from the prefetched info.
-  function samplePokemon(types: PokemonType[]) {
-    const seen = new Set<number>([pokemon.id]);
-    const out: { id: number; name: string; type: PokemonType }[] = [];
-    for (const t of types) {
-      const info = typeInfoByName.get(t);
+  // Max effectiveness of attackerTypes against a defender with defenderTypes.
+  // Uses the best available move (highest multiplier across attacker types).
+  function maxEffectiveness(attackerTypes: PokemonType[], defenderTypes: PokemonType[]): number {
+    let best = 0;
+    for (const atk of attackerTypes) {
+      const info = typeInfoByName.get(atk);
       if (!info) continue;
-      for (const entry of info.pokemon) {
-        const pid = idFromUrl(entry.pokemon.url);
-        if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
-        seen.add(pid);
-        out.push({ id: pid, name: entry.pokemon.name, type: info.name });
+      let m = 1;
+      for (const def of defenderTypes) {
+        if (info.damage_relations.double_damage_to.some((r) => r.name === def)) m *= 2;
+        else if (info.damage_relations.half_damage_to.some((r) => r.name === def)) m *= 0.5;
+        else if (info.damage_relations.no_damage_to.some((r) => r.name === def)) m *= 0;
       }
+      if (m > best) best = m;
     }
-    return out;
+    return best;
   }
 
-  const strongAgainstPokemon = samplePokemon(strongAgainstTypes);
-  const weakAgainstPokemon = samplePokemon(weakAgainstTypes);
-  const immuneFromPokemon = samplePokemon(immuneFromTypes);
-  const ineffectiveAgainstPokemon = samplePokemon(ineffectiveAgainstTypes);
+  const viewerTypes = pokemon.types.map((t) => t.type.name as PokemonType);
+
+  type MatchupEntry = { id: number; name: string; types: PokemonType[] };
+
+  function matchupList(predicate: (targetTypes: PokemonType[]) => boolean): MatchupEntry[] {
+    const out: MatchupEntry[] = [];
+    for (const [pid, info] of pokemonInfoMap) {
+      if (pid === pokemon.id) continue;
+      if (predicate(info.types)) out.push({ id: pid, name: info.name, types: info.types });
+    }
+    return out.sort((a, b) => a.id - b.id);
+  }
+
+  // Strong against: viewer can deal 2× or more to the target.
+  const strongAgainstPokemon = matchupList(
+    (def) => maxEffectiveness(viewerTypes, def) >= 2,
+  );
+  // Weak against: target can deal 2× or more to the viewer.
+  const weakAgainstPokemon = matchupList(
+    (atk) => maxEffectiveness(atk, viewerTypes) >= 2,
+  );
+  // Doesn't take damage from: target deals 0× to the viewer.
+  const immuneFromPokemon = matchupList(
+    (atk) => maxEffectiveness(atk, viewerTypes) === 0,
+  );
+  // Doesn't give damage to: viewer deals 0× to the target.
+  const ineffectiveAgainstPokemon = matchupList(
+    (def) => maxEffectiveness(viewerTypes, def) === 0,
+  );
 
   return (
     <main className="flex-1 pb-8">
