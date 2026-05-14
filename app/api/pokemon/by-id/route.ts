@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPokemon } from "@/lib/pokeapi";
+import { getPokemon, idFromUrl } from "@/lib/pokeapi";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -16,7 +16,12 @@ export async function GET(req: Request) {
     ids.map(async (id) => {
       try {
         const p = await getPokemon(id);
-        return { id: p.id, name: p.name, types: p.types.map((t) => t.type.name) };
+        return {
+          id: p.id,
+          speciesId: idFromUrl(p.species.url),
+          name: p.name,
+          types: p.types.map((t) => t.type.name),
+        };
       } catch {
         return null;
       }

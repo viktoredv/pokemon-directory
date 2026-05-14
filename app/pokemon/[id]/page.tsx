@@ -259,7 +259,7 @@ export default async function PokemonDetailPage({ params }: PageProps) {
           aria-hidden
           className="pointer-events-none absolute -right-4 -bottom-6 text-[140px] font-black leading-none text-white/25 select-none tabular sm:text-[180px]"
         >
-          {paddedId(pokemon.id).replace("#", "")}
+          {paddedId(species.id).replace("#", "")}
         </span>
 
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4">
@@ -277,7 +277,7 @@ export default async function PokemonDetailPage({ params }: PageProps) {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="tabular text-xs font-semibold text-zinc-900/60">
-                {paddedId(pokemon.id)}
+                {paddedId(species.id)}
               </p>
               <h1 className="truncate text-2xl font-bold tracking-tight">
                 {formatPokemonName(pokemon.name)}

@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 
 export interface PokemonCardData {
   id: number;
+  speciesId: number;
   name: string;
   types: PokemonType[];
 }
@@ -51,7 +52,7 @@ export function PokemonCard({
           aria-hidden
           className="absolute -right-6 -top-6 text-[88px] font-black leading-none text-white/40 select-none tabular"
         >
-          {paddedId(pokemon.id).replace("#", "")}
+          {paddedId(pokemon.speciesId).replace("#", "")}
         </span>
         <Image
           src={artworkUrl(pokemon.id)}
@@ -70,7 +71,7 @@ export function PokemonCard({
       <div className="flex flex-col gap-1.5 p-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-medium text-muted tabular">
-            {paddedId(pokemon.id)}
+            {paddedId(pokemon.speciesId)}
           </span>
         </div>
         <h3 className="truncate text-sm font-semibold tracking-tight">

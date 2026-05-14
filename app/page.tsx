@@ -24,6 +24,7 @@ export default async function Home() {
       const p = await getPokemon(id);
       return {
         id: p.id,
+        speciesId: idFromUrl(p.species.url),
         name: p.name,
         types: p.types.map((t) => t.type.name as PokemonType),
       };

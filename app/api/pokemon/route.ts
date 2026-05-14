@@ -16,6 +16,7 @@ export async function GET(req: Request) {
       const p = await getPokemon(id);
       return {
         id: p.id,
+        speciesId: idFromUrl(p.species.url),
         name: p.name,
         types: p.types.map((t) => t.type.name),
       };
