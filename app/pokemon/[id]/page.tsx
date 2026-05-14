@@ -132,25 +132,20 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   }
   const ineffectiveAgainstTypes = ineffectiveSet ? [...ineffectiveSet] : [];
 
-  // Pick sample Pokémon for each type bucket from the prefetched info.
-  function samplePokemon(types: PokemonType[], maxTotal = 15, perType = 3) {
+  function samplePokemon(types: PokemonType[]) {
     const seen = new Set<number>([pokemon.id]);
     const out: { id: number; name: string; type: PokemonType }[] = [];
     for (const t of types) {
       const info = typeInfoByName.get(t);
       if (!info) continue;
-      let taken = 0;
       for (const entry of info.pokemon) {
-        if (taken >= perType) break;
         const pid = idFromUrl(entry.pokemon.url);
         if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
         seen.add(pid);
         out.push({ id: pid, name: entry.pokemon.name, type: info.name });
-        taken++;
       }
-      if (out.length >= maxTotal) break;
     }
-    return out.slice(0, maxTotal);
+    return out;
   }
 
   const strongAgainstPokemon = samplePokemon(strongAgainstTypes);
@@ -423,13 +418,13 @@ function MatchupRow({
         {title}{" "}
         <span className="text-xs font-normal text-muted">({hint})</span>
       </h4>
-      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
         {items.map((p) => (
-          <li key={p.id} className="shrink-0">
+          <li key={p.id}>
             <Link
               href={`/pokemon/${p.id}`}
               className={cn(
-                "flex w-24 flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 text-zinc-900 transition hover:shadow-md",
+                "flex flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 text-zinc-900 transition hover:shadow-md",
                 typeStyles[p.type].from,
                 typeStyles[p.type].to,
               )}
