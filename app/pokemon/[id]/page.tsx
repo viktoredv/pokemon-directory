@@ -20,6 +20,7 @@ import {
   typeStyles,
 } from "@/lib/type-colors";
 import { TypeChip } from "@/components/type-chip";
+import { TypeChipButton } from "@/components/type-chip-button";
 import { StatBar } from "@/components/stat-bar";
 import { DetailTabs } from "@/components/detail-tabs";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -198,7 +199,7 @@ export default async function PokemonDetailPage({ params }: PageProps) {
               )}
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {pokemon.types.map((t) => (
-                  <TypeChip
+                  <TypeChipButton
                     key={t.type.name}
                     type={t.type.name as PokemonType}
                     size="md"

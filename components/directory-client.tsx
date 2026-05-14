@@ -62,9 +62,14 @@ export function DirectoryClient({
   const filtersActive =
     debounced.length > 0 || selectedTypes.length > 0 || selectedGens.length > 0;
 
-  // Compute id-set to fetch when in filter/search mode.
+  // When only type filters are active (no text, no gen), pull IDs from the
+  // type API so we get the full set instead of a directory slice.
+  const typeOnlyMode =
+    selectedTypes.length > 0 && debounced.length === 0 && selectedGens.length === 0;
+
+  // Compute id-set to fetch when in name/gen filter mode.
   const filteredIds = useMemo(() => {
-    if (!filtersActive) return null;
+    if (!filtersActive || typeOnlyMode) return null;
     let list = directory;
     if (debounced) list = list.filter((e) => e.name.includes(debounced));
     if (selectedGens.length > 0) {
@@ -73,11 +78,12 @@ export function DirectoryClient({
         return g ? selectedGens.includes(g.id) : false;
       });
     }
-    return list.slice(0, 150).map((e) => e.id);
-  }, [filtersActive, directory, debounced, selectedGens]);
+    return list.map((e) => e.id);
+  }, [filtersActive, typeOnlyMode, directory, debounced, selectedGens]);
 
   // Fetch details for filtered ids (then filter by type client-side).
   useEffect(() => {
+    if (typeOnlyMode) return; // handled by the effect below
     if (!filteredIds || filteredIds.length === 0) {
       setSearchItems([]);
       return;
@@ -85,7 +91,6 @@ export function DirectoryClient({
     const controller = new AbortController();
     startSearch(async () => {
       try {
-        // Chunk to stay under the API route's per-request cap.
         const chunks: number[][] = [];
         for (let i = 0; i < filteredIds.length; i += 40) {
           chunks.push(filteredIds.slice(i, i + 40));
@@ -112,7 +117,40 @@ export function DirectoryClient({
       }
     });
     return () => controller.abort();
-  }, [filteredIds, selectedTypes]);
+  }, [filteredIds, selectedTypes, typeOnlyMode]);
+
+  // Type-only mode: fetch IDs from the type API, then hydrate cards.
+  useEffect(() => {
+    if (!typeOnlyMode) return;
+    const controller = new AbortController();
+    startSearch(async () => {
+      try {
+        const res = await fetch(
+          `/api/pokemon/by-type?types=${selectedTypes.join(",")}`,
+          { signal: controller.signal },
+        );
+        const { ids } = (await res.json()) as { ids: number[] };
+        if (ids.length === 0) { setSearchItems([]); return; }
+        const chunks: number[][] = [];
+        for (let i = 0; i < ids.length; i += 40) chunks.push(ids.slice(i, i + 40));
+        const responses = await Promise.all(
+          chunks.map((c) =>
+            fetch(`/api/pokemon/by-id?ids=${c.join(",")}`, {
+              signal: controller.signal,
+            }).then((r) => r.json() as Promise<{ items: PokemonCardData[] }>),
+          ),
+        );
+        const order = new Map(ids.map((id, i) => [id, i]));
+        const items = responses
+          .flatMap((r) => r.items)
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        setSearchItems(items);
+      } catch {
+        /* aborted */
+      }
+    });
+    return () => controller.abort();
+  }, [typeOnlyMode, selectedTypes]);
 
   // Infinite scroll for browse mode
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -247,6 +285,11 @@ export function DirectoryClient({
       </header>
 
       <section aria-live="polite" className="mx-auto w-full max-w-6xl">
+        {filtersActive && !searching && displayItems.length > 0 && (
+          <p className="mb-3 text-xs text-muted">
+            {displayItems.length} Pokémon
+          </p>
+        )}
         {filtersActive && searching && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {Array.from({ length: 8 }).map((_, i) => (
