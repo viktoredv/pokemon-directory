@@ -49,18 +49,28 @@ export async function getEvolutionChain(id: number): Promise<EvolutionChain> {
   return api<EvolutionChain>(`/evolution-chain/${id}`);
 }
 
-/** Full name+id directory, used for client-side search. ~1300 entries. */
+/** Full name+id directory: base forms + mega/gmax forms. */
 export async function getDirectory(): Promise<DirectoryEntry[]> {
-  const data = await api<PokemonListResponse>(`/pokemon?limit=1500&offset=0`);
+  const data = await api<PokemonListResponse>(`/pokemon?limit=2000&offset=0`);
   return data.results
     .map((r) => ({ id: idFromUrl(r.url), name: r.name }))
-    .filter((e) => e.id > 0 && e.id < 10000);
+    .filter((e) => {
+      if (e.id <= 0) return false;
+      if (e.id < 10000) return true;
+      return /(?:^|-)(mega|gmax)(?:-|$)/.test(e.name);
+    });
 }
 
 export function formatPokemonName(name: string): string {
-  return name
-    .split("-")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+  const parts = name.split("-");
+  // Move "mega" or "gmax" to the front: "charizard-mega-x" → "Mega Charizard X"
+  const specialIdx = parts.findIndex((p) => p === "mega" || p === "gmax");
+  if (specialIdx > 0) {
+    const [special] = parts.splice(specialIdx, 1);
+    parts.unshift(special);
+  }
+  return parts
+    .map((p) => (p === "gmax" ? "GMax" : p.charAt(0).toUpperCase() + p.slice(1)))
     .join(" ");
 }
 

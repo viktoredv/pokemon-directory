@@ -12,7 +12,7 @@ import {
   paddedId,
 } from "@/lib/pokeapi";
 import type { EvolutionLink, PokemonType } from "@/lib/types";
-import { generationForId, typeStyles } from "@/lib/type-colors";
+import { generationForId, GENERATIONS, typeStyles } from "@/lib/type-colors";
 import { TypeChip } from "@/components/type-chip";
 import { StatBar } from "@/components/stat-bar";
 import { DetailTabs } from "@/components/detail-tabs";
@@ -40,10 +40,8 @@ export default async function PokemonDetailPage({ params }: PageProps) {
 
   let pokemon, species;
   try {
-    [pokemon, species] = await Promise.all([
-      getPokemon(numericId),
-      getSpecies(numericId),
-    ]);
+    pokemon = await getPokemon(numericId);
+    species = await getSpecies(pokemon.species.name);
   } catch {
     notFound();
   }
@@ -62,7 +60,29 @@ export default async function PokemonDetailPage({ params }: PageProps) {
     (e) => e.language.name === "en",
   );
   const genus = species.genera.find((g) => g.language.name === "en")?.genus;
-  const gen = generationForId(pokemon.id);
+
+  // Use species' generation (works for mega forms whose id > 10000).
+  const speciesGenId = idFromUrl(species.generation.url);
+  const gen = generationForId(species.id) ?? GENERATIONS.find((g) => g.id === speciesGenId);
+
+  // Alternate forms (mega, gmax, etc.) — non-default varieties of this species.
+  const altVarieties = species.varieties.filter(
+    (v) => !v.is_default && idFromUrl(v.pokemon.url) !== pokemon.id,
+  );
+  const forms = await Promise.all(
+    altVarieties.map(async (v) => {
+      try {
+        const p = await getPokemon(idFromUrl(v.pokemon.url));
+        return {
+          id: p.id,
+          name: p.name,
+          types: p.types.map((t) => t.type.name as PokemonType),
+        };
+      } catch {
+        return null;
+      }
+    }),
+  ).then((r) => r.filter((x): x is { id: number; name: string; types: PokemonType[] } => x !== null));
 
   return (
     <main className="flex-1 pb-8">
@@ -248,6 +268,49 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                 </p>
               ),
             },
+            ...(forms.length > 0
+              ? [
+                  {
+                    id: "forms",
+                    label: "Forms",
+                    content: (
+                      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {forms.map((f) => (
+                          <li key={f.id}>
+                            <Link
+                              href={`/pokemon/${f.id}`}
+                              className={cn(
+                                "flex flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-3 transition hover:shadow-md",
+                                typeStyles[f.types[0] ?? "normal"].from,
+                                typeStyles[f.types[0] ?? "normal"].to,
+                              )}
+                            >
+                              <div className="relative h-24 w-24">
+                                <Image
+                                  src={artworkUrl(f.id)}
+                                  alt={formatPokemonName(f.name)}
+                                  fill
+                                  sizes="96px"
+                                  className="object-contain drop-shadow-md"
+                                  unoptimized
+                                />
+                              </div>
+                              <span className="text-center text-xs font-semibold">
+                                {formatPokemonName(f.name)}
+                              </span>
+                              <div className="flex flex-wrap justify-center gap-1">
+                                {f.types.map((t) => (
+                                  <TypeChip key={t} type={t} />
+                                ))}
+                              </div>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       </section>

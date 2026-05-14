@@ -73,6 +73,7 @@ export interface PokemonSpecies {
   evolution_chain: { url: string };
   genera: { genus: string; language: NamedRef }[];
   color: NamedRef;
+  varieties: { is_default: boolean; pokemon: NamedRef }[];
 }
 
 export interface EvolutionLink {
