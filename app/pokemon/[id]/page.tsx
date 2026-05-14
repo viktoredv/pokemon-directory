@@ -23,6 +23,7 @@ import { TypeChip } from "@/components/type-chip";
 import { StatBar } from "@/components/stat-bar";
 import { DetailTabs } from "@/components/detail-tabs";
 import { FavoriteButton } from "@/components/favorite-button";
+import { MatchupSection } from "@/components/matchup-section";
 import { cn } from "@/lib/cn";
 
 interface PageProps {
@@ -135,24 +136,20 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   const ineffectiveAgainstTypes = ineffectiveSet ? [...ineffectiveSet] : [];
 
   // Pick sample Pokémon for each type bucket from the prefetched info.
-  function samplePokemon(types: PokemonType[], maxTotal = 15, perType = 3) {
+  function samplePokemon(types: PokemonType[]) {
     const seen = new Set<number>([pokemon.id]);
     const out: { id: number; name: string; type: PokemonType }[] = [];
     for (const t of types) {
       const info = typeInfoByName.get(t);
       if (!info) continue;
-      let taken = 0;
       for (const entry of info.pokemon) {
-        if (taken >= perType) break;
         const pid = idFromUrl(entry.pokemon.url);
         if (pid <= 0 || pid >= 10000 || seen.has(pid)) continue;
         seen.add(pid);
         out.push({ id: pid, name: entry.pokemon.name, type: info.name });
-        taken++;
       }
-      if (out.length >= maxTotal) break;
     }
-    return out.slice(0, maxTotal);
+    return out;
   }
 
   const strongAgainstPokemon = samplePokemon(strongAgainstTypes);
@@ -281,22 +278,22 @@ export default async function PokemonDetailPage({ params }: PageProps) {
                     </div>
                   </dl>
 
-                  <MatchupRow
+                  <MatchupSection
                     title="Strong against"
                     hint="2× damage"
                     items={strongAgainstPokemon}
                   />
-                  <MatchupRow
+                  <MatchupSection
                     title="Weak against"
                     hint="takes 2× damage"
                     items={weakAgainstPokemon}
                   />
-                  <MatchupRow
+                  <MatchupSection
                     title="Doesn't take damage from"
                     hint="0× damage"
                     items={immuneFromPokemon}
                   />
-                  <MatchupRow
+                  <MatchupSection
                     title="Doesn't give damage to"
                     hint="0× damage"
                     items={ineffectiveAgainstPokemon}
@@ -415,51 +412,3 @@ export default async function PokemonDetailPage({ params }: PageProps) {
   );
 }
 
-function MatchupRow({
-  title,
-  hint,
-  items,
-}: {
-  title: string;
-  hint: string;
-  items: { id: number; name: string; type: PokemonType }[];
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div>
-      <h4 className="mb-2 text-sm font-semibold">
-        {title}{" "}
-        <span className="text-xs font-normal text-muted">({hint})</span>
-      </h4>
-      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {items.map((p) => (
-          <li key={p.id} className="shrink-0">
-            <Link
-              href={`/pokemon/${p.id}`}
-              className={cn(
-                "flex w-24 flex-col items-center gap-1 rounded-2xl border border-border/60 bg-gradient-to-br p-2 text-zinc-900 transition hover:shadow-md",
-                typeStyles[p.type].from,
-                typeStyles[p.type].to,
-              )}
-            >
-              <div className="relative h-16 w-16">
-                <Image
-                  src={artworkUrl(p.id)}
-                  alt={formatPokemonName(p.name)}
-                  fill
-                  sizes="64px"
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-              <span className="line-clamp-1 text-center text-[11px] font-medium">
-                {formatPokemonName(p.name)}
-              </span>
-              <TypeChip type={p.type} />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
