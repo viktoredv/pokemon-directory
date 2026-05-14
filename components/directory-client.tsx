@@ -19,6 +19,7 @@ import {
   generationForId,
   typeStyles,
 } from "@/lib/type-colors";
+import { formatPokemonName } from "@/lib/pokeapi";
 import type { DirectoryEntry, PokemonType } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
@@ -71,7 +72,10 @@ export function DirectoryClient({
   const filteredIds = useMemo(() => {
     if (!filtersActive || typeOnlyMode) return null;
     let list = directory;
-    if (debounced) list = list.filter((e) => e.name.includes(debounced));
+    if (debounced) list = list.filter((e) =>
+      e.name.includes(debounced) ||
+      formatPokemonName(e.name).toLowerCase().includes(debounced),
+    );
     if (selectedGens.length > 0) {
       list = list.filter((e) => {
         const g = generationForId(e.id);

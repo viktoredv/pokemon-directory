@@ -55,6 +55,13 @@ export async function getType(name: string): Promise<TypeInfo> {
 }
 
 /** Full name+id directory: base forms + mega/gmax forms. */
+const REGION_ADJECTIVES: Record<string, string> = {
+  alola: "Alolan",
+  galar: "Galarian",
+  hisui: "Hisuian",
+  paldea: "Paldean",
+};
+
 export async function getDirectory(): Promise<DirectoryEntry[]> {
   const data = await api<PokemonListResponse>(`/pokemon?limit=2000&offset=0`);
   return data.results
@@ -62,13 +69,25 @@ export async function getDirectory(): Promise<DirectoryEntry[]> {
     .filter((e) => {
       if (e.id <= 0) return false;
       if (e.id < 10000) return true;
-      return /(?:^|-)(mega|gmax)(?:-|$)/.test(e.name);
+      return /(?:^|-)(mega|gmax|alola|galar|hisui|paldea)(?:-|$)/.test(e.name);
     });
 }
 
 export function formatPokemonName(name: string): string {
   const parts = name.split("-");
-  // Move "mega" or "gmax" to the front: "charizard-mega-x" → "Mega Charizard X"
+
+  // Regional forms: "meowth-alola" → "Alolan Meowth", "tauros-paldea-combat" → "Paldean Tauros Combat"
+  const regionIdx = parts.findIndex((p) => p in REGION_ADJECTIVES);
+  if (regionIdx > 0) {
+    const regionWord = REGION_ADJECTIVES[parts[regionIdx]];
+    const baseParts = parts.slice(0, regionIdx);
+    const extraParts = parts.slice(regionIdx + 1);
+    return [regionWord, ...baseParts, ...extraParts]
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ");
+  }
+
+  // Mega / GMax: "charizard-mega-x" → "Mega Charizard X"
   const specialIdx = parts.findIndex((p) => p === "mega" || p === "gmax");
   if (specialIdx > 0) {
     const [special] = parts.splice(specialIdx, 1);
