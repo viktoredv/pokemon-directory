@@ -96,25 +96,54 @@ export default async function PokemonDetailPage({ params }: PageProps) {
     const chain = await getEvolutionChain(evolutionChainId);
     evoPaths = getEvoPaths(chain.chain);
 
-    // If viewing a regional form, replace base-form IDs with regional equivalents.
-    // e.g. "meowth" step → "meowth-galar" when viewing Galarian Meowth.
+    // If viewing a regional form, resolve each chain species to its regional
+    // variant and filter out paths that belong to other regions.
     const regionMatch = pokemon.name.match(/-(alola|galar|hisui|paldea)(?:-|$)/);
     const region = regionMatch?.[1];
     if (region) {
-      const uniqueSteps = new Map<number, EvoStep>();
+      const ALL_REGIONS = ["alola", "galar", "hisui", "paldea"] as const;
+
+      // Collect unique steps by their original (base) ID before any mutation.
+      const stepsByOriginalId = new Map<number, EvoStep>();
       for (const path of evoPaths)
         for (const step of path)
-          if (!uniqueSteps.has(step.id)) uniqueSteps.set(step.id, step);
+          if (!stepsByOriginalId.has(step.id)) stepsByOriginalId.set(step.id, step);
+
+      // For each species: try to find the current region's form.
+      // If not found, check whether any OTHER region's form exists — those
+      // species belong to another region's evolution path and should be excluded.
+      const hasOtherRegion = new Set<number>(); // original species IDs
 
       await Promise.all(
-        [...uniqueSteps.values()].map(async (step) => {
+        [...stepsByOriginalId.entries()].map(async ([originalId, step]) => {
+          const baseName = step.name;
           try {
-            const p = await getPokemon(`${step.name}-${region}`);
+            const p = await getPokemon(`${baseName}-${region}`);
             step.id = p.id;
             step.name = p.name;
-          } catch { /* no regional form for this species */ }
+            return;
+          } catch { /* no variant for current region */ }
+
+          // No regional form for our region — check other regions.
+          for (const other of ALL_REGIONS) {
+            if (other === region) continue;
+            try {
+              await getPokemon(`${baseName}-${other}`);
+              hasOtherRegion.add(originalId); // belongs to a different regional line
+              break;
+            } catch { /* try next */ }
+          }
         }),
       );
+
+      // Drop paths where any non-root step is tied to a different region.
+      // A step that wasn't overridden keeps its original ID, so the set check works.
+      if (hasOtherRegion.size > 0) {
+        const filtered = evoPaths.filter(
+          (path) => !path.slice(1).some((s) => hasOtherRegion.has(s.id)),
+        );
+        if (filtered.length > 0) evoPaths = filtered;
+      }
     }
   } catch {}
 
